@@ -3,6 +3,18 @@ const { Client, GatewayIntentBits, Partials } = require("discord.js");
 const OpenAI = require("openai");
 const axios = require("axios");
 
+const express = require("express");
+const app = express();
+
+app.get("/", (req, res) => {
+  res.send("Bot is alive");
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Web server running on port ${PORT}`);
+});
+
 // --- updated client creation for v14 ---
 const client = new Client({
   intents: [
@@ -17,7 +29,7 @@ const client = new Client({
 const token = process.env.DISCORD_BOT_TOKEN;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-client.on('clientReady', async () => {
+client.once("ready", async () => {
   console.log(`Client has been initiated! ${client.user.username}`)
 
   for (const term of Object.keys(slangBaseReplies)) {
@@ -187,8 +199,6 @@ client.on('messageCreate', async (message) => {
     } catch {}
   }
 });
- 
-client.login(token);
 
 // ---- SMART MEMORY EXTENSION ----
 
@@ -346,3 +356,5 @@ client.on("messageCreate", async (message) => {
 });
 
 // ---- END SMART MEMORY EXTENSION ----
+
+client.login(token);

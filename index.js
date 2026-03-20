@@ -3,7 +3,6 @@ require("dotenv").config();
 const { Client, GatewayIntentBits, Partials } = require("discord.js");
 const OpenAI = require("openai");
 const axios = require("axios");
-const express = require("express");
 
 // --------------------
 // ENV LOGGING
@@ -11,20 +10,6 @@ const express = require("express");
 console.log("[Startup] DISCORD_BOT_TOKEN present:", !!process.env.DISCORD_BOT_TOKEN);
 console.log("[Startup] OPENAI_API_KEY present:", !!process.env.OPENAI_API_KEY);
 console.log("[Startup] SERPAPI_KEY present:", !!process.env.SERPAPI_KEY);
-
-// --------------------
-// EXPRESS HEALTH SERVER
-// --------------------
-const app = express();
-
-app.get("/", (_req, res) => {
-  res.send("Bot is alive");
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`[HTTP] Web server running on port ${PORT}`);
-});
 
 // --------------------
 // DISCORD CLIENT
@@ -415,29 +400,8 @@ client.on("messageCreate", async (message) => {
   }
 });
 
-// --------------------
-// LOGIN WITH BACKOFF
-// --------------------
-async function loginWithRetry(maxAttempts = 5, baseDelayMs = 30000) {
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      console.log(`[Login] Attempt ${attempt}/${maxAttempts}`);
-      await client.login(token);
-      console.log("[Login] client.login() resolved");
-      return;
-    } catch (err) {
-      console.error(`[Login] Attempt ${attempt} failed`, err?.message || err);
-
-      if (attempt === maxAttempts) {
-        console.error("[Login] Max attempts reached. Giving up.");
-        return;
-      }
-
-      const delay = baseDelayMs * Math.pow(2, attempt - 1);
-      console.log(`[Login] Waiting ${delay / 1000}s before retrying...`);
-      await new Promise((resolve) => setTimeout(resolve, delay));
-    }
-  }
-}
-
-loginWithRetry();
+client.login(token).then(() => {
+  console.log("[Login] client.login() resolved");
+}).catch((err) => {
+  console.error("[Login error]", err);
+});

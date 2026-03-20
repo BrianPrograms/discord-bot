@@ -302,7 +302,7 @@ client.on("messageCreate", async (message) => {
     if (!content) return;
 
     if (containsSixtySeven(content)) {
-      return message.reply(randomItem(sixtySevenTenors));
+      return message.channel.send(randomItem(sixtySevenTenors));
     }
 
     const match = content.match(/^\s*i(?:\s*(?:'|’)?\s*m|\s+am)\s+([^.,!?;:]+)/i);
@@ -316,7 +316,7 @@ client.on("messageCreate", async (message) => {
     for (const { term, regex } of slangPatterns) {
       if (regex.test(content)) {
         const reply = await getVariant(term);
-        return message.reply(reply);
+        return message.channel.send(reply);
       }
     }
 

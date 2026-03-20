@@ -12,6 +12,9 @@ console.log("[Startup] DISCORD_BOT_TOKEN present:", !!process.env.DISCORD_BOT_TO
 console.log("[Startup] OPENAI_API_KEY present:", !!process.env.OPENAI_API_KEY);
 console.log("[Startup] SERPAPI_KEY present:", !!process.env.SERPAPI_KEY);
 
+// --------------------
+// EXPRESS HEALTH SERVER
+// --------------------
 const app = express();
 
 app.get("/", (_req, res) => {
@@ -308,12 +311,6 @@ client.once("ready", async () => {
 // --------------------
 client.on("messageCreate", async (message) => {
   try {
-    console.log("[messageCreate]", {
-      author: message.author?.tag,
-      guild: message.guild?.name || "DM",
-      content: message.content
-    });
-
     if (message.author.bot) return;
 
     const content = (message.content || "").trim();
@@ -378,7 +375,6 @@ client.on("messageCreate", async (message) => {
       });
 
       let answer = completion.choices?.[0]?.message?.content ?? "";
-      console.log("[AI] First pass answer:", JSON.stringify(answer));
 
       if (isSearchNeeded(answer)) {
         const searchResults = await serpSearch(userPrompt);
@@ -419,35 +415,29 @@ client.on("messageCreate", async (message) => {
   }
 });
 
-client.on("debug", (msg) => {
-  console.log("[Discord debug]", msg);
-});
+// --------------------
+// LOGIN WITH BACKOFF
+// --------------------
+async function loginWithRetry(maxAttempts = 5, baseDelayMs = 30000) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      console.log(`[Login] Attempt ${attempt}/${maxAttempts}`);
+      await client.login(token);
+      console.log("[Login] client.login() resolved");
+      return;
+    } catch (err) {
+      console.error(`[Login] Attempt ${attempt} failed`, err?.message || err);
 
-async function testDiscordApi() {
-  try {
-    const res = await axios.get("https://discord.com/api/v10/users/@me", {
-      headers: {
-        Authorization: `Bot ${token}`,
-      },
-      timeout: 15000,
-    });
+      if (attempt === maxAttempts) {
+        console.error("[Login] Max attempts reached. Giving up.");
+        return;
+      }
 
-    console.log("[Discord API test] Success:", res.data.username, res.data.id);
-  } catch (err) {
-    console.error(
-      "[Discord API test] Failed:",
-      err.response?.status,
-      err.response?.data || err.message
-    );
+      const delay = baseDelayMs * Math.pow(2, attempt - 1);
+      console.log(`[Login] Waiting ${delay / 1000}s before retrying...`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
   }
 }
 
-(async () => {
-  await testDiscordApi();
-
-  client.login(token).then(() => {
-    console.log("[Startup] client.login() resolved");
-  }).catch((err) => {
-    console.error("[Login error]", err);
-  });
-})();
+loginWithRetry();

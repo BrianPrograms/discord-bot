@@ -4,173 +4,90 @@ const { Client, GatewayIntentBits, Partials } = require("discord.js");
 const OpenAI = require("openai");
 const axios = require("axios");
 
-// --------------------
-// ENV LOGGING
-// --------------------
 console.log("[Startup] DISCORD_BOT_TOKEN present:", !!process.env.DISCORD_BOT_TOKEN);
 console.log("[Startup] OPENAI_API_KEY present:", !!process.env.OPENAI_API_KEY);
 console.log("[Startup] SERPAPI_KEY present:", !!process.env.SERPAPI_KEY);
 
-// --------------------
-// DISCORD CLIENT
-// --------------------
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMembers
   ],
-  partials: [Partials.Channel, Partials.Message],
+  partials: [Partials.Channel, Partials.Message]
 });
 
 const token = process.env.DISCORD_BOT_TOKEN;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// --------------------
-// ERROR LOGGING
-// --------------------
-client.on("error", (err) => console.error("[Discord client error]", err));
-client.on("warn", (info) => console.warn("[Discord warning]", info));
-client.on("shardError", (err) => console.error("[Discord shard error]", err));
+client.on("error", function (err) {
+  console.error("[Discord client error]", err);
+});
 
-process.on("unhandledRejection", (reason) => {
+client.on("warn", function (info) {
+  console.warn("[Discord warning]", info);
+});
+
+client.on("shardError", function (err) {
+  console.error("[Discord shard error]", err);
+});
+
+process.on("unhandledRejection", function (reason) {
   console.error("[Unhandled rejection]", reason);
 });
-process.on("uncaughtException", (err) => {
+
+process.on("uncaughtException", function (err) {
   console.error("[Uncaught exception]", err);
 });
 
-// --------------------
-// SLANG
-// --------------------
 const slangBaseReplies = {
   lol: "That statement has rendered me most amused.",
-  bruh: "My good fellow, I am utterly astounded by your actions.",
+  bruh: "Good heavens, I am utterly astounded.",
   wow: "Such marvels leave me thoroughly astonished.",
   omg: "Gracious on the throne above, I can scarcely comprehend such happenings.",
   nah: "Regretfully, I must refuse your proposition.",
   huh: "Pray, could you elucidate the matter once more?",
   yikes: "I am thoroughly disquieted by the grievous spectacle before me.",
   fafo: "Do proceed with your folly and witness the ensuing consequences firsthand.",
-  stfu: "I must implore you to exercise the noble art of silence forthwith.",
-  ngl: "I confess, with utmost sincerity, that deceit eludes my present disposition.",
+  stfu: "Stop. I must implore you to exercise the noble art of silence forthwith.",
+  ngl: "I too must confess, with utmost sincerity, that deceit eludes my present disposition.",
   idc: "Your revelation moves me not in the slightest degree.",
-  fr: "Indeed, I speak with unembellished veracity.",
+  fr: "Indeed, you speak with unembellished veracity.",
   lmao: "My amusement has reached a most ungovernable crescendo.",
-  tbh: "In the spirit of unvarnished candor, permit me to speak plainly.",
+  tbh: "You are truthful in the spirit of unvarnished candor.",
   wtf: "What manner of ungodly absurdity is this before my eyes?",
   ikr: "Indeed, I too am painfully acquainted with this lamentable truth.",
   smh: "I find myself compelled to oscillate my cranium in silent disappointment.",
-  lowk: "I shall admit this truth in a most subdued and understated manner."
+  lowk: "In a most subdued and understated manner, I must agree to this truth."
 };
 
 const slangVariantCache = {};
 const VARIANTS_PER_TERM = 8;
 
-function shuffleArray(arr) {
-  const copy = [...arr];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
-}
-
-async function generateVariants(term, baseReply, count = VARIANTS_PER_TERM) {
-  try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-5",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a Discord bot with an overly formal, aristocratic, slightly dramatic, humorous tone. " +
-            `Generate ${count} unique short reply variations for a slang trigger. ` +
-            "Each reply must preserve the same meaning as the original. " +
-            "Each reply must be one sentence only. " +
-            "Each reply must be under 22 words. " +
-            "Do not use emojis. " +
-            "Do not number the responses. " +
-            "Return ONLY a valid JSON array of strings."
-        },
-        {
-          role: "user",
-          content: `Slang trigger: ${term}\nBase reply: ${baseReply}`
-        }
-      ]
-    });
-
-    const raw = completion.choices?.[0]?.message?.content?.trim() || "[]";
-
-    let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch (err) {
-      console.error(`[Variant JSON parse error: ${term}]`, err, raw);
-      parsed = [];
-    }
-
-    const cleaned = Array.isArray(parsed)
-      ? parsed.filter((x) => typeof x === "string").map((x) => x.trim()).filter(Boolean)
-      : [];
-
-    const unique = [...new Set([baseReply, ...cleaned])];
-    return shuffleArray(unique);
-  } catch (err) {
-    console.error(`[Variant generation error: ${term}]`, err);
-    return [baseReply];
-  }
-}
-
-async function getVariant(term) {
-  const baseReply = slangBaseReplies[term];
-  if (!baseReply) return "I find myself bereft of an appropriate reply.";
-
-  if (!slangVariantCache[term] || slangVariantCache[term].length === 0) {
-    slangVariantCache[term] = await generateVariants(term, baseReply);
-    console.log(`[Cache refill] ${term}: ${slangVariantCache[term].length}`);
-  }
-
-  return slangVariantCache[term].pop() || baseReply;
-}
-
-// --------------------
-// 67 TRIGGER
-// --------------------
 const sixtySevenTenors = [
-  "https://tenor.com/view/cat-67-scp-67-funyuns-funny-gif-75413186200073602",
-  "https://tenor.com/view/sixseven-six-seven-six-seve-67-gif-14143337669032958349",
-  "https://tenor.com/view/nub-nub-cat-silly-cat-silly-cute-gif-18315508831080649878",
-  "https://tenor.com/view/bosnov-67-bosnov-67-67-meme-gif-16727368109953357722"
+  "https://tenor.com/ecUoBs2k3YQ.gif",
+  "https://tenor.com/q0WNC9BA9Cr.gif",
+  "https://tenor.com/6ztZ4qv7oX.gif",
+  "https://tenor.com/t5PGB8YJaQM.gif",
+  "https://tenor.com/qHKanqrTdUm.gif",
+  "https://tenor.com/ehldEDLdfrF.gif",
+  "https://tenor.com/fRF2bMR4rFG.gif",
+  "https://tenor.com/uPLqSij9pKo.gif",
+  "https://tenor.com/gCKCmFqqO2q.gif",
+  "https://tenor.com/d9Asl0NPkvp.gif",
+  "https://tenor.com/ldYgbZKRlr4.gif",
+  "https://tenor.com/gzNLZCiMWRe.gif",
+  "https://tenor.com/qmWsC7lUdfj.gif",
+  "https://tenor.com/mMuG95keAmU.gif",
+  "https://tenor.com/jx3n6J7zl5i.gif",
+  "https://tenor.com/h24pKY5HZ1N.gif",
+  "https://tenor.com/g0exGauI9hH.gif",
+  "https://tenor.com/cLQYrY4wk9h.gif",
+  "https://tenor.com/skEpe7lQI0T.gif",
+  "https://tenor.com/ej3ZE5RYKzV.gif",
+  "https://tenor.com/oWvtx1fMDEU.gif"
 ];
-
-function randomItem(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
-function containsSixtySeven(text = "") {
-  const lower = text.toLowerCase();
-  const patterns = [
-    /\b67\b/,
-    /\b6\s*7\b/,
-    /\b6\s*,\s*7\b/,
-    /\b6\s*\/\s*7\b/,
-    /\b6\s*-\s*7\b/,
-    /\b6\s*or\s*7\b/,
-    /\b6\s*and\s*7\b/,
-    /\bsix\s+seven\b/,
-    /\bsix,\s*seven\b/,
-    /\bsix\s*-\s*seven\b/,
-    /\bsix\s*or\s*seven\b/,
-    /\bsix\s*and\s*seven\b/,
-    /\bsixty\s+seven\b/,
-    /\bsixty-\s*seven\b/,
-    /\bsixtyseven\b/,
-    /\bsixseven\b/
-  ];
-  return patterns.some((r) => r.test(lower));
-}
 
 const slangPatterns = [
   { term: "lmao", regex: /\blmao\b/i },
@@ -193,20 +110,298 @@ const slangPatterns = [
   { term: "lowk", regex: /\blowk\b/i }
 ];
 
-// --------------------
-// MEMORY + SEARCH
-// --------------------
-async function replyInChunks(message, text, chunkSize = 1900) {
-  for (let i = 0; i < text.length; i += chunkSize) {
-    await message.reply(text.slice(i, i + chunkSize));
-  }
-}
-
 const userMemory = {};
 const MAX_TURNS = 20;
 const SUMMARY_TARGET = 500;
 
-async function summarizeConversation(userId) {
+const guildStyleMemory = {};
+const MAX_STYLE_MESSAGES = 200;
+
+const guildRecentGifMemory = {};
+const MAX_GIF_MESSAGES = 50;
+const RANDOM_GIF_REPLY_PROBABILITY = 0.2;
+
+const randomReplyCooldowns = new Map();
+const RANDOM_REPLY_COOLDOWN_MS = 20 * 60 * 1000;
+const RANDOM_REPLY_PROBABILITY = 0.03;
+
+const slangReplyCooldowns = new Map();
+const SLANG_REPLY_COOLDOWN_MS = 2 * 60 * 1000;
+const SLANG_REPLY_PROBABILITY = 0.35;
+
+function shuffleArray(arr) {
+  const copy = arr.slice();
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const temp = copy[i];
+    copy[i] = copy[j];
+    copy[j] = temp;
+  }
+  return copy;
+}
+
+function randomItem(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function delay(ms) {
+  return new Promise(function (resolve) {
+    setTimeout(resolve, ms);
+  });
+}
+
+function randomDelay(min, max) {
+  const low = typeof min === "number" ? min : 700;
+  const high = typeof max === "number" ? max : 1800;
+  return Math.floor(Math.random() * (high - low + 1)) + low;
+}
+
+function humanDelay(text, min, max) {
+  const value = typeof text === "string" ? text : "";
+  const low = typeof min === "number" ? min : 600;
+  const high = typeof max === "number" ? max : 2200;
+  const estimated = 500 + value.length * 18;
+  return Math.max(low, Math.min(high, estimated));
+}
+
+function containsSixtySeven(text) {
+  const lower = (text || "").toLowerCase();
+  const patterns = [
+    /\b67\b/,
+    /\b6\s*7\b/,
+    /\b6\s*,\s*7\b/,
+    /\b6\s*\/\s*7\b/,
+    /\b6\s*-\s*7\b/,
+    /\b6\s*or\s*7\b/,
+    /\b6\s*and\s*7\b/,
+    /\bsix\s+seven\b/,
+    /\bsix,\s*seven\b/,
+    /\bsix\s*-\s*seven\b/,
+    /\bsix\s*or\s*seven\b/,
+    /\bsix\s*and\s*seven\b/,
+    /\bsixty\s+seven\b/,
+    /\bsixty-\s*seven\b/,
+    /\bsixtyseven\b/,
+    /\bsixseven\b/
+  ];
+  return patterns.some(function (r) {
+    return r.test(lower);
+  });
+}
+
+function isSearchNeeded(text) {
+  const normalised = (text || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^[`"'“”‘’\s]+|[`"'“”‘’\s]+$/g, "")
+    .replace(/\.$/, "");
+  return normalised === "search_needed";
+}
+
+function isNormalChatMessage(content) {
+  const trimmed = (content || "").trim();
+  if (!trimmed) return false;
+  if (!/^[a-zA-Z]/.test(trimmed)) return false;
+  if (/^[!/$?]/.test(trimmed)) return false;
+  if (/^https?:\/\//i.test(trimmed)) return false;
+  if (/^```/.test(trimmed)) return false;
+  if (trimmed.length < 2) return false;
+  return true;
+}
+
+function addToGuildStyleMemory(guildId, message) {
+  if (!guildId) return;
+  if (!guildStyleMemory[guildId]) {
+    guildStyleMemory[guildId] = [];
+  }
+
+  guildStyleMemory[guildId].push({
+    content: message.content.trim(),
+    authorId: message.author.id,
+    channelId: message.channel.id,
+    timestamp: Date.now()
+  });
+
+  if (guildStyleMemory[guildId].length > MAX_STYLE_MESSAGES) {
+    guildStyleMemory[guildId].shift();
+  }
+}
+
+function canRandomReplyInChannel(channelId) {
+  const last = randomReplyCooldowns.get(channelId) || 0;
+  return Date.now() - last >= RANDOM_REPLY_COOLDOWN_MS;
+}
+
+function markRandomReply(channelId) {
+  randomReplyCooldowns.set(channelId, Date.now());
+}
+
+function shouldRandomlyReply(probability) {
+  const chance = typeof probability === "number" ? probability : RANDOM_REPLY_PROBABILITY;
+  return Math.random() < chance;
+}
+
+function canSlangReplyInChannel(channelId) {
+  const last = slangReplyCooldowns.get(channelId) || 0;
+  return Date.now() - last >= SLANG_REPLY_COOLDOWN_MS;
+}
+
+function markSlangReply(channelId) {
+  slangReplyCooldowns.set(channelId, Date.now());
+}
+
+function shouldReplyToSlang() {
+  return Math.random() < SLANG_REPLY_PROBABILITY;
+}
+
+function isGifLikeUrl(url) {
+  if (!url) return false;
+
+  return (
+    /\.gif($|\?)/i.test(url) ||
+    /tenor\.com/i.test(url) ||
+    /media\d*\.tenor\./i.test(url) ||
+    /giphy\.com/i.test(url) ||
+    /media\d*\.giphy\./i.test(url)
+  );
+}
+
+function addGifToGuildMemory(guildId, url) {
+  if (!guildId || !url) return;
+
+  if (!guildRecentGifMemory[guildId]) {
+    guildRecentGifMemory[guildId] = [];
+  }
+
+  guildRecentGifMemory[guildId].push({
+    url: url,
+    timestamp: Date.now()
+  });
+
+  if (guildRecentGifMemory[guildId].length > MAX_GIF_MESSAGES) {
+    guildRecentGifMemory[guildId].shift();
+  }
+}
+
+function getRandomRecentGif(guildId) {
+  const gifs = guildRecentGifMemory[guildId] || [];
+  if (gifs.length === 0) return null;
+  return randomItem(gifs).url;
+}
+
+function extractGifUrlsFromMessage(message) {
+  const urls = [];
+
+  for (const attachment of message.attachments.values()) {
+    if (attachment.url && isGifLikeUrl(attachment.url)) {
+      urls.push(attachment.url);
+    }
+  }
+
+  for (const embed of message.embeds) {
+    if (embed.url && isGifLikeUrl(embed.url)) {
+      urls.push(embed.url);
+    }
+
+    if (embed.image && embed.image.url && isGifLikeUrl(embed.image.url)) {
+      urls.push(embed.image.url);
+    }
+
+    if (embed.thumbnail && embed.thumbnail.url && isGifLikeUrl(embed.thumbnail.url)) {
+      urls.push(embed.thumbnail.url);
+    }
+
+    if (embed.video && embed.video.url && isGifLikeUrl(embed.video.url)) {
+      urls.push(embed.video.url);
+    }
+  }
+
+  return Array.from(new Set(urls));
+}
+
+async function generateVariants(term, baseReply, count) {
+  const amount = typeof count === "number" ? count : VARIANTS_PER_TERM;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-5",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a Discord bot with an overly formal, aristocratic, slightly dramatic, humorous tone. " +
+            "Generate " + String(amount) + " unique short reply variations for a slang trigger. " +
+            "Each reply must preserve the same meaning as the original. " +
+            "Each reply must be one sentence only. " +
+            "Each reply must be under 22 words. " +
+            "Do not use emojis. " +
+            "Do not number the responses. " +
+            "Return ONLY a valid JSON array of strings."
+        },
+        {
+          role: "user",
+          content: "Slang trigger: " + term + "\nBase reply: " + baseReply
+        }
+      ]
+    });
+
+    const raw =
+      completion.choices &&
+      completion.choices[0] &&
+      completion.choices[0].message &&
+      completion.choices[0].message.content
+        ? completion.choices[0].message.content.trim()
+        : "[]";
+
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (err) {
+      console.error("[Variant JSON parse error: " + term + "]", err, raw);
+      parsed = [];
+    }
+
+    const cleaned = Array.isArray(parsed)
+      ? parsed
+          .filter(function (x) {
+            return typeof x === "string";
+          })
+          .map(function (x) {
+            return x.trim();
+          })
+          .filter(Boolean)
+      : [];
+
+    const unique = Array.from(new Set([baseReply].concat(cleaned)));
+    return shuffleArray(unique);
+  } catch (err) {
+    console.error("[Variant generation error: " + term + "]", err);
+    return [baseReply];
+  }
+}
+
+async function getVariant(term) {
+  const baseReply = slangBaseReplies[term];
+  if (!baseReply) {
+    return "I find myself bereft of an appropriate reply.";
+  }
+
+  if (!slangVariantCache[term] || slangVariantCache[term].length === 0) {
+    slangVariantCache[term] = await generateVariants(term, baseReply, VARIANTS_PER_TERM);
+    console.log("[Cache refill] " + term + ": " + String(slangVariantCache[term].length));
+  }
+
+  return slangVariantCache[term].pop() || baseReply;
+}
+
+async function replyInChunks(message, text, chunkSize) {
+  const size = typeof chunkSize === "number" ? chunkSize : 1900;
+  for (let i = 0; i < text.length; i += size) {
+    await message.reply(text.slice(i, i + size));
+  }
+}
+
+async function summariseConversation(userId) {
   const history = userMemory[userId];
   if (!history || history.length <= MAX_TURNS) return;
 
@@ -214,7 +409,11 @@ async function summarizeConversation(userId) {
     const summaryPrompt = [
       {
         role: "system",
-        content: `Summarize the following conversation in under ${SUMMARY_TARGET} tokens. Keep important details, tasks, and facts, but remove filler. The summary should read like notes to remind the assistant of context.`
+        content:
+          "Summarise the following conversation in under " +
+          String(SUMMARY_TARGET) +
+          " tokens. Keep important details, tasks, and facts, but remove filler. " +
+          "The summary should read like notes to remind the assistant of context."
       },
       { role: "user", content: JSON.stringify(history) }
     ];
@@ -224,15 +423,18 @@ async function summarizeConversation(userId) {
       messages: summaryPrompt
     });
 
-    const summaryText = completion.choices?.[0]?.message?.content?.trim() || "Summary unavailable.";
+    const summaryText =
+      completion.choices &&
+      completion.choices[0] &&
+      completion.choices[0].message &&
+      completion.choices[0].message.content
+        ? completion.choices[0].message.content.trim()
+        : "Summary unavailable.";
 
     const lastFew = history.slice(-5);
-    userMemory[userId] = [
-      { role: "system", content: "Conversation summary: " + summaryText },
-      ...lastFew
-    ];
+    userMemory[userId] = [{ role: "system", content: "Conversation summary: " + summaryText }].concat(lastFew);
 
-    console.log(`[Memory] Summarized history for user ${userId}`);
+    console.log("[Memory] Summarised history for user " + userId);
   } catch (err) {
     console.error("[Memory error]", err);
   }
@@ -249,94 +451,235 @@ async function serpSearch(query) {
       }
     });
 
-    let results = [];
-    if (res.data.organic_results) {
+    const results = [];
+    if (res.data && res.data.organic_results) {
       for (const r of res.data.organic_results.slice(0, 5)) {
-        results.push(`${r.title}: ${r.snippet} (${r.link})`);
+        results.push(r.title + ": " + r.snippet + " (" + r.link + ")");
       }
     }
 
     return results.join("\n") || "No results found.";
   } catch (err) {
-    console.error("[SerpAPI error]", err.response?.data || err.message);
+    console.error("[SerpAPI error]", err.response ? err.response.data : err.message);
     return "Error fetching from SerpAPI.";
   }
 }
 
-function isSearchNeeded(text = "") {
-  const normalized = text
-    .trim()
-    .toLowerCase()
-    .replace(/^[`"'“”‘’\s]+|[`"'“”‘’\s]+$/g, "")
-    .replace(/\.$/, "");
-  return normalized === "search_needed";
+function summariseGuildStyle(guildId) {
+  const memory = guildStyleMemory[guildId] || [];
+  const sample = memory.slice(-30);
+
+  if (sample.length === 0) {
+    return "No strong style signal yet. Keep replies casual, short, and natural.";
+  }
+
+  let lowercaseCount = 0;
+  let emojiCount = 0;
+  let slangCount = 0;
+  let shortCount = 0;
+  let chaoticCount = 0;
+
+  const slangRegex = /\b(lol|lmao|bruh|bro|fr|tbh|lowk|ngl|wtf|ikr|smh|nah|yikes|omg|idk|rn|af|sus|cap)\b/i;
+  const emojiRegex = /[\p{Extended_Pictographic}]/gu;
+
+  for (const entry of sample) {
+    const text = entry.content.trim();
+    if (!text) continue;
+
+    if (text === text.toLowerCase()) {
+      lowercaseCount += 1;
+    }
+
+    if (emojiRegex.test(text)) {
+      emojiCount += 1;
+    }
+
+    if (slangRegex.test(text)) {
+      slangCount += 1;
+    }
+
+    if (text.split(/\s+/).length <= 6) {
+      shortCount += 1;
+    }
+
+    if (/[!?]{2,}|😭|💀|lmao|wtf|bro|nah/i.test(text)) {
+      chaoticCount += 1;
+    }
+  }
+
+  const total = sample.length;
+
+  const lowercaseStyle = lowercaseCount / total >= 0.7 ? "mostly lowercase" : "mixed capitalisation";
+  const emojiStyle = emojiCount / total >= 0.4 ? "emoji appears fairly often" : "emoji is used sparingly";
+  const slangStyle = slangCount / total >= 0.35 ? "slang-heavy" : "not heavily slang-based";
+  const lengthStyle = shortCount / total >= 0.6 ? "messages are usually short and blunt" : "messages are mixed in length";
+  const chaosStyle = chaoticCount / total >= 0.35 ? "tone is slightly chaotic, joking, or reactive" : "tone is fairly restrained";
+
+  return "Observed server style: " +
+    lowercaseStyle + ", " +
+    emojiStyle + ", " +
+    slangStyle + ", " +
+    lengthStyle + ", " +
+    chaosStyle + ".";
 }
 
-// --------------------
-// READY
-// --------------------
-client.once("ready", async () => {
-  console.log(`[Discord] Client initiated as ${client.user.username}`);
-  console.log(`[Discord] Logged in as ${client.user.tag}`);
-  console.log(`[Discord] Guild count: ${client.guilds.cache.size}`);
+async function generateRandomStyleReply(currentMessage, guildId) {
+  const memory = guildStyleMemory[guildId] || [];
+  const recentExamples = memory
+    .slice(-8)
+    .map(function (m) {
+      return "- " + m.content;
+    })
+    .join("\n");
+
+  const styleSummary = summariseGuildStyle(guildId);
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-5",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are casually chiming into a Discord server. " +
+            "Your reply must sound like it came from this specific server, not from a generic chatbot."
+        },
+        {
+          role: "system",
+          content: styleSummary
+        },
+        {
+          role: "system",
+          content:
+            "Closely mirror the recent examples for lowercase usage, slang density, punctuation, emoji frequency, brevity, and humour style. " +
+            "If the examples are dry, be dry. If they are blunt, be blunt. If they are chaotic, be slightly chaotic. " +
+            "Keep the reply short, usually 3 to 12 words, never more than 18 words. " +
+            "Do not explain anything. Do not narrate. Do not sound polished. Do not sound formal unless the examples are formal. " +
+            "Do not mention being a bot or AI. " +
+            "If the message is confusing, absurd, or out of context, a short confused reaction is acceptable. " +
+            "Return only the reply text."
+        },
+        {
+          role: "system",
+          content: "Recent server style examples:\n" + (recentExamples || "- no examples available")
+        },
+        {
+          role: "user",
+          content: "Current message:\n" + currentMessage
+        }
+      ]
+    });
+
+    const text =
+      completion.choices &&
+      completion.choices[0] &&
+      completion.choices[0].message &&
+      completion.choices[0].message.content
+        ? completion.choices[0].message.content.trim()
+        : "";
+
+    if (!text) return null;
+    return text;
+  } catch (err) {
+    console.error("[Random style reply error]", err);
+    return null;
+  }
+}
+
+client.once("ready", async function () {
+  console.log("[Discord] Client initiated as " + client.user.username);
+  console.log("[Discord] Logged in as " + client.user.tag);
+  console.log("[Discord] Guild count: " + String(client.guilds.cache.size));
 
   for (const term of Object.keys(slangBaseReplies)) {
     try {
-      slangVariantCache[term] = await generateVariants(term, slangBaseReplies[term]);
-      console.log(`[Cache warmed] ${term}: ${slangVariantCache[term].length}`);
+      slangVariantCache[term] = await generateVariants(term, slangBaseReplies[term], VARIANTS_PER_TERM);
+      console.log("[Cache warmed] " + term + ": " + String(slangVariantCache[term].length));
     } catch (err) {
-      console.error(`[Cache warm error] ${term}`, err);
+      console.error("[Cache warm error] " + term, err);
       slangVariantCache[term] = [slangBaseReplies[term]];
     }
   }
 });
 
-// --------------------
-// MESSAGE HANDLER
-// --------------------
-client.on("messageCreate", async (message) => {
+client.on("messageCreate", async function (message) {
   try {
     if (message.author.bot) return;
 
     const content = (message.content || "").trim();
     if (!content) return;
 
+    if (message.guild) {
+      const gifUrls = extractGifUrlsFromMessage(message);
+      for (const gifUrl of gifUrls) {
+        addGifToGuildMemory(message.guild.id, gifUrl);
+      }
+    }
+
+    const lower = content.toLowerCase();
+
     if (containsSixtySeven(content)) {
-      return message.channel.send(randomItem(sixtySevenTenors));
+      const tenor = randomItem(sixtySevenTenors);
+      await message.channel.sendTyping();
+      await delay(randomDelay(800, 1600));
+      await message.channel.send(tenor);
+      return;
     }
 
     const match = content.match(/^\s*i(?:\s*(?:'|’)?\s*m|\s+am)\s+([^.,!?;:]+)/i);
     if (match) {
       const rest = match[1].trim();
       if (rest.length > 0) {
-        return message.reply(`Hello ${rest}! I'm Dad.`);
+        const dadReply = "Hello " + rest + "! I'm Dad.";
+        await message.channel.sendTyping();
+        await delay(humanDelay(dadReply, 700, 1800));
+        await message.channel.send(dadReply);
+        return;
       }
     }
 
-    for (const { term, regex } of slangPatterns) {
-      if (regex.test(content)) {
-        const reply = await getVariant(term);
-        return message.channel.send(reply);
+    for (const entry of slangPatterns) {
+      if (entry.regex.test(content)) {
+        if (canSlangReplyInChannel(message.channel.id) && shouldReplyToSlang()) {
+          const reply = await getVariant(entry.term);
+          await message.channel.sendTyping();
+          await delay(humanDelay(reply, 700, 1800));
+          await message.channel.send(reply);
+          markSlangReply(message.channel.id);
+          return;
+        }
+        break;
       }
     }
 
-    if (content.toLowerCase() === "test") {
-      return message.reply("Test successful!");
-    } else if (content.toLowerCase() === "!roll") {
+    if (lower === "test") {
+      await message.reply("Test successful!");
+      return;
+    }
+
+    if (lower === "!roll") {
       const roll = Math.floor(Math.random() * 6) + 1;
-      return message.reply(`🎲 You rolled a ${roll}`);
-    } else if (content.toLowerCase().startsWith("!ping")) {
-      return message.reply("🏓 Pong!");
-    } else if (content.toLowerCase().startsWith("!echo ")) {
-      return message.reply(content.slice("!echo ".length));
+      await message.reply("🎲 You rolled a " + String(roll));
+      return;
     }
 
-    if (content.toLowerCase().startsWith("!ask ")) {
+    if (lower.startsWith("!ping")) {
+      await message.reply("🏓 Pong!");
+      return;
+    }
+
+    if (lower.startsWith("!echo ")) {
+      await message.reply(content.slice("!echo ".length));
+      return;
+    }
+
+    if (lower.startsWith("!ask ")) {
       const userId = message.author.id;
       const userPrompt = content.slice("!ask ".length).trim();
 
       if (!userPrompt) {
-        return message.reply("Ask me something like: `!ask how do I center a div?`");
+        await message.reply("Ask me something like: !ask how do I center a div?");
+        return;
       }
 
       if (!userMemory[userId]) userMemory[userId] = [];
@@ -347,19 +690,24 @@ client.on("messageCreate", async (message) => {
           role: "system",
           content:
             "You are a concise, helpful assistant in a Discord server. Keep answers short unless asked for detail. " +
-            "If you are missing important or recent information, respond with exactly: search_needed",
-        },
-        ...userMemory[userId],
-      ];
+            "If you are missing important or recent information, respond with exactly: search_needed"
+        }
+      ].concat(userMemory[userId]);
 
       await message.channel.sendTyping();
 
       let completion = await openai.chat.completions.create({
         model: "gpt-5",
-        messages: context,
+        messages: context
       });
 
-      let answer = completion.choices?.[0]?.message?.content ?? "";
+      let answer =
+        completion.choices &&
+        completion.choices[0] &&
+        completion.choices[0].message &&
+        completion.choices[0].message.content
+          ? completion.choices[0].message.content
+          : "";
 
       if (isSearchNeeded(answer)) {
         const searchResults = await serpSearch(userPrompt);
@@ -368,26 +716,58 @@ client.on("messageCreate", async (message) => {
           {
             role: "system",
             content:
-              "You now have real Google search results. Always use them to answer the user, and include relevant links in your reply. Do NOT reply with 'search_needed' in this turn.",
+              "You now have real Google search results. Always use them to answer the user, and include relevant links in your reply. Do NOT reply with search_needed in this turn."
           },
-          { role: "system", content: "Web results:\n" + searchResults },
-          ...userMemory[userId].slice(-6),
-          { role: "user", content: userPrompt },
-        ];
+          { role: "system", content: "Web results:\n" + searchResults }
+        ].concat(userMemory[userId].slice(-6)).concat([{ role: "user", content: userPrompt }]);
 
         completion = await openai.chat.completions.create({
           model: "gpt-5",
-          messages: secondContext,
+          messages: secondContext
         });
 
-        answer = completion.choices?.[0]?.message?.content?.trim() || "Sorry, I couldn’t find anything.";
+        answer =
+          completion.choices &&
+          completion.choices[0] &&
+          completion.choices[0].message &&
+          completion.choices[0].message.content
+            ? completion.choices[0].message.content.trim()
+            : "Sorry, I could not find anything.";
       }
 
       await replyInChunks(message, answer);
       userMemory[userId].push({ role: "assistant", content: answer });
 
       if (userMemory[userId].length > MAX_TURNS) {
-        await summarizeConversation(userId);
+        await summariseConversation(userId);
+      }
+
+      return;
+    }
+
+    if (message.guild && isNormalChatMessage(content)) {
+      addToGuildStyleMemory(message.guild.id, message);
+
+      if (canRandomReplyInChannel(message.channel.id) && shouldRandomlyReply(RANDOM_REPLY_PROBABILITY)) {
+        const recentGif = getRandomRecentGif(message.guild.id);
+
+        if (recentGif && Math.random() < RANDOM_GIF_REPLY_PROBABILITY) {
+          await message.channel.sendTyping();
+          await delay(randomDelay(900, 2200));
+          await message.channel.send(recentGif);
+          markRandomReply(message.channel.id);
+          return;
+        }
+
+        const randomReply = await generateRandomStyleReply(content, message.guild.id);
+
+        if (randomReply) {
+          await message.channel.sendTyping();
+          await delay(humanDelay(randomReply, 900, 2500));
+          await message.channel.send(randomReply);
+          markRandomReply(message.channel.id);
+          return;
+        }
       }
     }
   } catch (err) {
@@ -400,8 +780,8 @@ client.on("messageCreate", async (message) => {
   }
 });
 
-client.login(token).then(() => {
+client.login(token).then(function () {
   console.log("[Login] client.login() resolved");
-}).catch((err) => {
+}).catch(function (err) {
   console.error("[Login error]", err);
 });

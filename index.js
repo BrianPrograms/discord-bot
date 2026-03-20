@@ -419,8 +419,35 @@ client.on("messageCreate", async (message) => {
   }
 });
 
-client.login(token).then(() => {
-  console.log("[Startup] client.login() resolved");
-}).catch((err) => {
-  console.error("[Login error]", err);
+client.on("debug", (msg) => {
+  console.log("[Discord debug]", msg);
 });
+
+async function testDiscordApi() {
+  try {
+    const res = await axios.get("https://discord.com/api/v10/users/@me", {
+      headers: {
+        Authorization: `Bot ${token}`,
+      },
+      timeout: 15000,
+    });
+
+    console.log("[Discord API test] Success:", res.data.username, res.data.id);
+  } catch (err) {
+    console.error(
+      "[Discord API test] Failed:",
+      err.response?.status,
+      err.response?.data || err.message
+    );
+  }
+}
+
+(async () => {
+  await testDiscordApi();
+
+  client.login(token).then(() => {
+    console.log("[Startup] client.login() resolved");
+  }).catch((err) => {
+    console.error("[Login error]", err);
+  });
+})();

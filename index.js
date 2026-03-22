@@ -123,7 +123,7 @@ const RANDOM_GIF_REPLY_PROBABILITY = 0.2;
 
 const randomReplyCooldowns = new Map();
 const RANDOM_REPLY_COOLDOWN_MS = 3 * 60 * 1000;
-const RANDOM_REPLY_PROBABILITY = 0.03;
+const RANDOM_REPLY_PROBABILITY = 0.025;
 
 const slangReplyCooldowns = new Map();
 const SLANG_REPLY_COOLDOWN_MS = 2 * 60 * 1000;

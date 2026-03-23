@@ -41,30 +41,6 @@ process.on("uncaughtException", function (err) {
   console.error("[Uncaught exception]", err);
 });
 
-const slangBaseReplies = {
-  lol: "That statement has rendered me most amused.",
-  bruh: "Good heavens, I am utterly astounded.",
-  wow: "Such marvels leave me thoroughly astonished.",
-  omg: "Gracious on the throne above, I can scarcely comprehend such happenings.",
-  nah: "Regretfully, I must refuse your proposition.",
-  huh: "Pray, could you elucidate the matter once more?",
-  yikes: "I am thoroughly disquieted by the grievous spectacle before me.",
-  fafo: "Do proceed with your folly and witness the ensuing consequences firsthand.",
-  stfu: "Stop. I must implore you to exercise the noble art of silence forthwith.",
-  ngl: "I too must confess, with utmost sincerity, that deceit eludes my present disposition.",
-  idc: "Your revelation moves me not in the slightest degree.",
-  fr: "Indeed, you speak with unembellished veracity.",
-  lmao: "My amusement has reached a most ungovernable crescendo.",
-  tbh: "You are truthful in the spirit of unvarnished candor.",
-  wtf: "What manner of ungodly absurdity is this before my eyes?",
-  ikr: "Indeed, I too am painfully acquainted with this lamentable truth.",
-  smh: "I find myself compelled to oscillate my cranium in silent disappointment.",
-  lowk: "In a most subdued and understated manner, I must agree to this truth."
-};
-
-const slangVariantCache = {};
-const VARIANTS_PER_TERM = 8;
-
 const sixtySevenTenors = [
   "https://tenor.com/ecUoBs2k3YQ.gif",
   "https://tenor.com/q0WNC9BA9Cr.gif",
@@ -118,7 +94,7 @@ const guildStyleMemory = {};
 const MAX_STYLE_MESSAGES = 200;
 
 const guildRecentGifMemory = {};
-const MAX_GIF_MESSAGES = 50;
+const MAX_GIF_MESSAGES = 100;
 const RANDOM_GIF_REPLY_PROBABILITY = 0.2;
 
 const randomReplyCooldowns = new Map();
@@ -128,17 +104,7 @@ const RANDOM_REPLY_PROBABILITY = 0.025;
 const slangReplyCooldowns = new Map();
 const SLANG_REPLY_COOLDOWN_MS = 2 * 60 * 1000;
 const SLANG_REPLY_PROBABILITY = 0.35;
-
-function shuffleArray(arr) {
-  const copy = arr.slice();
-  for (let i = copy.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const temp = copy[i];
-    copy[i] = copy[j];
-    copy[j] = temp;
-  }
-  return copy;
-}
+const SLANG_OPPOSITE_REACTION_PROBABILITY = 0.25;
 
 function randomItem(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
@@ -211,6 +177,7 @@ function isNormalChatMessage(content) {
 
 function addToGuildStyleMemory(guildId, message) {
   if (!guildId) return;
+
   if (!guildStyleMemory[guildId]) {
     guildStyleMemory[guildId] = [];
   }
@@ -254,15 +221,23 @@ function shouldReplyToSlang() {
   return Math.random() < SLANG_REPLY_PROBABILITY;
 }
 
+function isTenorPageUrl(url) {
+  return typeof url === "string" && /https?:\/\/tenor\.com\/view\//i.test(url);
+}
+
+function isGifImageUrl(url) {
+  return typeof url === "string" && /\.gif($|\?)/i.test(url);
+}
+
 function isGifLikeUrl(url) {
   if (!url) return false;
 
   return (
-    /\.gif($|\?)/i.test(url) ||
-    /tenor\.com/i.test(url) ||
-    /media\d*\.tenor\./i.test(url) ||
+    isTenorPageUrl(url) ||
+    isGifImageUrl(url) ||
     /giphy\.com/i.test(url) ||
-    /media\d*\.giphy\./i.test(url)
+    /media\d*\.giphy\./i.test(url) ||
+    /media\d*\.tenor\./i.test(url)
   );
 }
 
@@ -290,108 +265,54 @@ function getRandomRecentGif(guildId) {
 }
 
 function extractGifUrlsFromMessage(message) {
-  const urls = [];
+  const preferred = [];
+  const fallback = [];
 
   for (const attachment of message.attachments.values()) {
-    if (attachment.url && isGifLikeUrl(attachment.url)) {
-      urls.push(attachment.url);
+    if (!attachment.url) continue;
+
+    if (isTenorPageUrl(attachment.url) || isGifImageUrl(attachment.url)) {
+      preferred.push(attachment.url);
+    } else if (isGifLikeUrl(attachment.url)) {
+      fallback.push(attachment.url);
     }
   }
 
   for (const embed of message.embeds) {
-    if (embed.url && isGifLikeUrl(embed.url)) {
-      urls.push(embed.url);
+    if (embed.url) {
+      if (isTenorPageUrl(embed.url) || isGifImageUrl(embed.url)) {
+        preferred.push(embed.url);
+      } else if (isGifLikeUrl(embed.url)) {
+        fallback.push(embed.url);
+      }
     }
 
-    if (embed.image && embed.image.url && isGifLikeUrl(embed.image.url)) {
-      urls.push(embed.image.url);
+    if (embed.image && embed.image.url) {
+      if (isGifImageUrl(embed.image.url)) {
+        preferred.push(embed.image.url);
+      } else if (isGifLikeUrl(embed.image.url)) {
+        fallback.push(embed.image.url);
+      }
     }
 
-    if (embed.thumbnail && embed.thumbnail.url && isGifLikeUrl(embed.thumbnail.url)) {
-      urls.push(embed.thumbnail.url);
+    if (embed.thumbnail && embed.thumbnail.url) {
+      if (isGifImageUrl(embed.thumbnail.url)) {
+        preferred.push(embed.thumbnail.url);
+      } else if (isGifLikeUrl(embed.thumbnail.url)) {
+        fallback.push(embed.thumbnail.url);
+      }
     }
 
-    if (embed.video && embed.video.url && isGifLikeUrl(embed.video.url)) {
-      urls.push(embed.video.url);
+    if (embed.video && embed.video.url) {
+      if (isGifImageUrl(embed.video.url)) {
+        preferred.push(embed.video.url);
+      } else if (isGifLikeUrl(embed.video.url)) {
+        fallback.push(embed.video.url);
+      }
     }
   }
 
-  return Array.from(new Set(urls));
-}
-
-async function generateVariants(term, baseReply, count) {
-  const amount = typeof count === "number" ? count : VARIANTS_PER_TERM;
-
-  try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-5",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a Discord bot with an overly formal, aristocratic, slightly dramatic, humorous tone. " +
-            "Generate " + String(amount) + " unique short reply variations for a slang trigger. " +
-            "Each reply must preserve the same meaning as the original. " +
-            "Each reply must be one sentence only. " +
-            "Each reply must be under 22 words. " +
-            "Do not use emojis. " +
-            "Do not number the responses. " +
-            "Return ONLY a valid JSON array of strings."
-        },
-        {
-          role: "user",
-          content: "Slang trigger: " + term + "\nBase reply: " + baseReply
-        }
-      ]
-    });
-
-    const raw =
-      completion.choices &&
-      completion.choices[0] &&
-      completion.choices[0].message &&
-      completion.choices[0].message.content
-        ? completion.choices[0].message.content.trim()
-        : "[]";
-
-    let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch (err) {
-      console.error("[Variant JSON parse error: " + term + "]", err, raw);
-      parsed = [];
-    }
-
-    const cleaned = Array.isArray(parsed)
-      ? parsed
-          .filter(function (x) {
-            return typeof x === "string";
-          })
-          .map(function (x) {
-            return x.trim();
-          })
-          .filter(Boolean)
-      : [];
-
-    const unique = Array.from(new Set([baseReply].concat(cleaned)));
-    return shuffleArray(unique);
-  } catch (err) {
-    console.error("[Variant generation error: " + term + "]", err);
-    return [baseReply];
-  }
-}
-
-async function getVariant(term) {
-  const baseReply = slangBaseReplies[term];
-  if (!baseReply) {
-    return "I find myself bereft of an appropriate reply.";
-  }
-
-  if (!slangVariantCache[term] || slangVariantCache[term].length === 0) {
-    slangVariantCache[term] = await generateVariants(term, baseReply, VARIANTS_PER_TERM);
-    console.log("[Cache refill] " + term + ": " + String(slangVariantCache[term].length));
-  }
-
-  return slangVariantCache[term].pop() || baseReply;
+  return Array.from(new Set(preferred.concat(fallback)));
 }
 
 async function replyInChunks(message, text, chunkSize) {
@@ -523,6 +444,76 @@ function summariseGuildStyle(guildId) {
     chaosStyle + ".";
 }
 
+async function generateContextualSlangReply(term, currentMessage, guildId, shouldContradict) {
+  const memory = guildStyleMemory[guildId] || [];
+  const recentExamples = memory
+    .slice(-8)
+    .map(function (m) {
+      return "- " + m.content;
+    })
+    .join("\n");
+
+  const styleSummary = summariseGuildStyle(guildId);
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-5",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are casually reacting in a Discord server. " +
+            "You are not explaining slang. You are joining the conversation like another person in the server."
+        },
+        {
+          role: "system",
+          content: styleSummary
+        },
+        {
+          role: "system",
+          content:
+            "Closely mirror the recent examples for lowercase usage, slang density, punctuation, emoji frequency, brevity, and humour style. " +
+            "Keep the reply short, usually 2 to 12 words, never more than 16 words. " +
+            "Do not sound polished. Do not sound formal unless the server somehow is formal. " +
+            "Do not mention being a bot or AI. " +
+            "Return only the reply text."
+        },
+        {
+          role: "system",
+          content:
+            "The user used the slang term '" + term + "' in reaction to something. " +
+            "React to the situation itself, not to the word as a definition. " +
+            (shouldContradict
+              ? "Take the opposite or dissenting reaction in a natural way if it fits."
+              : "Usually align with the implied reaction naturally.")
+        },
+        {
+          role: "system",
+          content: "Recent server style examples:\n" + (recentExamples || "- no examples available")
+        },
+        {
+          role: "user",
+          content: "Message containing the slang:\n" + currentMessage
+        }
+      ]
+    });
+
+    const text =
+      completion.choices &&
+      completion.choices[0] &&
+      completion.choices[0].message &&
+      completion.choices[0].message.content
+        ? completion.choices[0].message.content.trim()
+        : "";
+
+    if (!text) return null;
+    return text;
+  } catch (err) {
+    console.error("[Contextual slang reply error]", err);
+    return null;
+  }
+}
+
 async function generateRandomStyleReply(currentMessage, guildId) {
   const memory = guildStyleMemory[guildId] || [];
   const recentExamples = memory
@@ -590,16 +581,6 @@ client.once("ready", async function () {
   console.log("[Discord] Client initiated as " + client.user.username);
   console.log("[Discord] Logged in as " + client.user.tag);
   console.log("[Discord] Guild count: " + String(client.guilds.cache.size));
-
-  for (const term of Object.keys(slangBaseReplies)) {
-    try {
-      slangVariantCache[term] = await generateVariants(term, slangBaseReplies[term], VARIANTS_PER_TERM);
-      console.log("[Cache warmed] " + term + ": " + String(slangVariantCache[term].length));
-    } catch (err) {
-      console.error("[Cache warm error] " + term, err);
-      slangVariantCache[term] = [slangBaseReplies[term]];
-    }
-  }
 });
 
 client.on("messageCreate", async function (message) {
@@ -640,13 +621,26 @@ client.on("messageCreate", async function (message) {
 
     for (const entry of slangPatterns) {
       if (entry.regex.test(content)) {
+        if (message.guild && isNormalChatMessage(content)) {
+          addToGuildStyleMemory(message.guild.id, message);
+        }
+
         if (canSlangReplyInChannel(message.channel.id) && shouldReplyToSlang()) {
-          const reply = await getVariant(entry.term);
-          await message.channel.sendTyping();
-          await delay(humanDelay(reply, 700, 1800));
-          await message.channel.send(reply);
-          markSlangReply(message.channel.id);
-          return;
+          const shouldContradict = Math.random() < SLANG_OPPOSITE_REACTION_PROBABILITY;
+          const reply = await generateContextualSlangReply(
+            entry.term,
+            content,
+            message.guild ? message.guild.id : null,
+            shouldContradict
+          );
+
+          if (reply) {
+            await message.channel.sendTyping();
+            await delay(humanDelay(reply, 700, 1800));
+            await message.channel.send(reply);
+            markSlangReply(message.channel.id);
+            return;
+          }
         }
         break;
       }

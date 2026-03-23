@@ -607,11 +607,12 @@ client.on("messageCreate", async function (message) {
       return;
     }
 
+    const botName = process.env.BOT_NAME;
     const match = content.match(/^\s*i(?:\s*(?:'|’)?\s*m|\s+am)\s+([^.,!?;:]+)/i);
     if (match) {
       const rest = match[1].trim();
       if (rest.length > 0) {
-        const dadReply = "Hello " + rest + "! I'm Dad.";
+        const dadReply = "Hello " + rest + "! I'm " + botName +".";
         await message.channel.sendTyping();
         await delay(humanDelay(dadReply, 700, 1800));
         await message.channel.send(dadReply);

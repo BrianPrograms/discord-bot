@@ -221,28 +221,13 @@ function shouldReplyToSlang() {
   return Math.random() < SLANG_REPLY_PROBABILITY;
 }
 
-function isTenorPageUrl(url) {
-  return typeof url === "string" && /https?:\/\/tenor\.com\/view\//i.test(url);
-}
-
 function isGifImageUrl(url) {
   return typeof url === "string" && /\.gif($|\?)/i.test(url);
 }
 
-function isGifLikeUrl(url) {
-  if (!url) return false;
-
-  return (
-    isTenorPageUrl(url) ||
-    isGifImageUrl(url) ||
-    /giphy\.com/i.test(url) ||
-    /media\d*\.giphy\./i.test(url) ||
-    /media\d*\.tenor\./i.test(url)
-  );
-}
-
 function addGifToGuildMemory(guildId, url) {
   if (!guildId || !url) return;
+  if (!isGifImageUrl(url)) return;
 
   if (!guildRecentGifMemory[guildId]) {
     guildRecentGifMemory[guildId] = [];
@@ -265,54 +250,29 @@ function getRandomRecentGif(guildId) {
 }
 
 function extractGifUrlsFromMessage(message) {
-  const preferred = [];
-  const fallback = [];
+  const urls = [];
 
   for (const attachment of message.attachments.values()) {
-    if (!attachment.url) continue;
-
-    if (isTenorPageUrl(attachment.url) || isGifImageUrl(attachment.url)) {
-      preferred.push(attachment.url);
-    } else if (isGifLikeUrl(attachment.url)) {
-      fallback.push(attachment.url);
+    if (attachment.url && isGifImageUrl(attachment.url)) {
+      urls.push(attachment.url);
     }
   }
 
   for (const embed of message.embeds) {
-    if (embed.url) {
-      if (isTenorPageUrl(embed.url) || isGifImageUrl(embed.url)) {
-        preferred.push(embed.url);
-      } else if (isGifLikeUrl(embed.url)) {
-        fallback.push(embed.url);
-      }
+    if (embed.url && isGifImageUrl(embed.url)) {
+      urls.push(embed.url);
     }
 
-    if (embed.image && embed.image.url) {
-      if (isGifImageUrl(embed.image.url)) {
-        preferred.push(embed.image.url);
-      } else if (isGifLikeUrl(embed.image.url)) {
-        fallback.push(embed.image.url);
-      }
+    if (embed.image && embed.image.url && isGifImageUrl(embed.image.url)) {
+      urls.push(embed.image.url);
     }
 
-    if (embed.thumbnail && embed.thumbnail.url) {
-      if (isGifImageUrl(embed.thumbnail.url)) {
-        preferred.push(embed.thumbnail.url);
-      } else if (isGifLikeUrl(embed.thumbnail.url)) {
-        fallback.push(embed.thumbnail.url);
-      }
-    }
-
-    if (embed.video && embed.video.url) {
-      if (isGifImageUrl(embed.video.url)) {
-        preferred.push(embed.video.url);
-      } else if (isGifLikeUrl(embed.video.url)) {
-        fallback.push(embed.video.url);
-      }
+    if (embed.thumbnail && embed.thumbnail.url && isGifImageUrl(embed.thumbnail.url)) {
+      urls.push(embed.thumbnail.url);
     }
   }
 
-  return Array.from(new Set(preferred.concat(fallback)));
+  return Array.from(new Set(urls));
 }
 
 async function replyInChunks(message, text, chunkSize) {
